@@ -40,10 +40,17 @@ def compress(file):
                 else:
                     frequency[sym] = 1
                 size += 1
+        # Символ конца файла        
+        frequency[''] = 1
+        size += 1
+
         f.close()
+
     # Получение вероятности
     for sym in frequency:
         frequency[sym] /= size
+    
+    print(frequency)
 
     # Построение интервалов и get вероятность
     with open(file, "r") as f:
@@ -54,36 +61,48 @@ def compress(file):
         for line in f:
             for sym in line:
                 interval = get_interval(frequency, low, high)
-                print(interval[sym])
 
                 for i in interval:
                     if i == sym:
                         low = interval[i][0]
                         high = interval[i][1]
                         probability = random.triangular(low, high)
+
+        # Так как символ конца файла - '', был добавлен искусственно а не в файл
+        # необходимо пересчитать 
+        interval = get_interval(frequency, low, high)
+        for i in interval:
+            if i == '':
+                low = interval[i][0]
+                high = interval[i][1]
+                probability = random.triangular(low, high)
+
         f.close()
     
     # 8 цифр после запятой
-    probability = int(pow(10, 9) * probability)
-    #print(probability)
+    probability = int(pow(10, 17) * probability)
+
 
     def get_fraction(x):
-        x = int(pow(10, 9) * x)
+        x = int(pow(10, 17) * x)
         return x
 
     frequency = dict(zip(frequency.keys(),[get_fraction(i) for i in frequency.values()]))
-    print(frequency)
 
-    print(len(frequency))
     # Запись результата в файл
     with open(file + '.enc', "wb") as out:
-        out.write(len(frequency).to_bytes(2, 'big'))
+        out.write(len(frequency ).to_bytes(2, 'big'))
 
         for sym, value in frequency.items():
-            out.write(int(sym).to_bytes(2, "big"))
-            out.write(value.to_bytes(4, "big"))
+            
+            if sym == '':
+                out.write(int(0).to_bytes(2, "big"))
+                out.write(value.to_bytes(8, "big"))
+            else:
+                out.write(ord(sym).to_bytes(2, "big"))
+                out.write(value.to_bytes(8, "big"))
         
-        out.write(probability.to_bytes(4, 'big'))
+        out.write(probability.to_bytes(8, 'big'))
         out.close()    
 
 
@@ -93,7 +112,7 @@ def decompress(file):
         
 
         def fraction_to_float(x):
-            x = float(pow(10, -8) * x)
+            x = float(pow(10, -17) * x)
             return x
         
 
@@ -107,26 +126,40 @@ def decompress(file):
         '''
         frequency = dict()
         for i in range(len_frequency):
-            symbol = chr(int.from_bytes(f.read(1), "big"))
+            symbol = chr(int.from_bytes(f.read(2), "big"))
 
-            value =  int.from_bytes(f.read(4), "big")
+            value =  int.from_bytes(f.read(8), "big")
             value = fraction_to_float(value)
             frequency[symbol] = value
         
 
-        probability = int.from_bytes(f.read(4), "big")
-        probability = float(pow(10, -9) * probability)
-
+        probability = int.from_bytes(f.read(8), "big")
+        probability = float(pow(10, -17) * probability)
+    
         print(frequency)
-        print(probability)
+        f.close()
 
-        
-        # print(chr(int.from_bytes(f.read(1), "big")))
-        # print(int.from_bytes(f.read(4), "big"))
-        # for j in f:
-        #     print(j)
-            #print(int(i, 10))
-            #print(i)
+    # Расшифровка в файл
+    with open(file + ".dec", "w") as out:
+     
+        high = 1.0
+        low = 0.0
+        flag = True
+        while flag:  
+            interval = get_interval(frequency, low, high)
+            for sym, value in interval.items():
+                if value[0] <= probability < value[1]:
+                    print(interval)
+                    if sym == chr(0):
+                        flag = False
+                        break
+
+                    out.write(sym)
+
+                    low = value[0]
+                    high = value[1]
+                    break
+
 
 
 def main():
